@@ -10,15 +10,64 @@ Designed for seamless integration with **Google Antigravity**, **Claude Code**, 
 
 ---
 
-## 🚀 Key Features
+## 📊 Comprehensive Skill Capabilities Matrix
 
-- 📑 **Native EAGLE XML Parser (`eagle_parser.py`):** High-speed parsing of `.sch` schematic and `.brd` board layout XML files (EAGLE v6.0 through EAGLE v9.6.2 and Fusion 360 Electronics).
-- 🔍 **Schematic ERC Analyzer (`analyze_schematic.py`):** Automatically detects unconnected IC pins, floating single-connection nets, power domain conflicts, missing decoupling capacitors, reset/enable pullups, quartz crystal load caps, and auto-generated net names.
-- 📐 **PCB Layout DRC / DFM Analyzer (`analyze_pcb.py`):** Calculates board dimensions and surface area, flags thin trace widths (< 0.15mm / 6mil), small via drill sizes (< 0.3mm / 12mil), unrouted airwire signals, and edge clearances.
-- 🔄 **Schematic-vs-Board Cross Analysis (`cross_analysis.py`):** Cross-verifies schematic instance parts against board elements, checking for missing components, value mismatches, and unrouted net signals.
-- 📊 **BOM Extractor (`export_bom.py`):** Aggregates component counts, values, packages, and designators into structured JSON and CSV formats for integration with distributor skills (`digikey`, `mouser`, `lcsc`, `element14`).
-- ✍️ **Programmatic XML Editor (`edit_eagle.py`):** Allows programmatic modification of component values, net names, and part attributes with clean DTD-compliant XML re-serialization.
-- 📜 **Command Script Generator (`generate_scr.py`):** Compiles executable EAGLE CAD batch script files (`.scr`) for GUI automation.
+| Feature / Domain | Module / Script | Coverage & Detail Level | Execution Mode |
+| :--- | :--- | :--- | :---: |
+| **Schematic XML Parsing** | `eagle_parser.py` | Full parsing of parts, symbol libraries, gate-to-symbol resolution, sheet instances, smashed text attributes, rotative offsets, and net pinrefs. | ⚡ Headless Pure Python |
+| **PCB Layout XML Parsing** | `eagle_parser.py` | Full parsing of elements, footprint packages, SMD pads, TH pads, routed track wires, inter-layer vias, copper pour polygons, and mechanical holes. | ⚡ Headless Pure Python |
+| **Board Geometry & Outline** | `analyze_pcb.py` | Automatic boundary detection on Layer 20 (Dimension), board width/height calculation ($\text{mm}$), and surface area estimation ($\text{cm}^2$). | ⚡ Headless Pure Python |
+| **Electrical Rules Check (ERC)** | `analyze_schematic.py` | Automated 7-rule audit suite covering unconnected IC pins, floating single-node nets, power shorts, missing decoupling caps, reset pullups, and auto-generated net names. | ⚡ Headless Pure Python |
+| **Design Rules Check (DRC/DFM)** | `analyze_pcb.py` | Automated 6-rule audit suite covering track width thresholds, via drill limits, unrouted airwires, silkscreen-over-pad overlaps, and board edge margins. | ⚡ Headless Pure Python |
+| **Schematic-vs-PCB Verification** | `cross_analysis.py` | Consistency verification between schematic parts list and PCB elements, reporting unplaced components, value mismatches, and unmapped signals. | ⚡ Headless Pure Python |
+| **BOM Extraction & Sourcing** | `export_bom.py` | Grouped component extraction (DeviceSet, Value, Package, Library, Quantity, Designators) exported as structured JSON or CSV for distributor integration. | ⚡ Headless Pure Python |
+| **Programmatic XML Editing** | `edit_eagle.py` | Live DOM modifications: updating component values, renaming nets/signals, setting part MPN attributes, with DTD-compliant XML re-serialization. | ⚡ Headless Pure Python |
+| **GUI Automation Scripting** | `generate_scr.py` | Programmatic compilation of executable EAGLE batch command scripts (`.scr`) for GUI automation (Grids, Adds, Values, Wires, Vias, Texts). | ⚡ Headless Pure Python |
+
+---
+
+## 🔬 Detailed Architecture & Module Breakdown
+
+### 1. Native EAGLE XML Parser Engine (`scripts/eagle_parser.py`)
+- **XML Format Compatibility:** Supports EAGLE XML v6.0 through v9.6.2 and Autodesk Fusion 360 Electronics.
+- **Schematic Resolution:** Maps `<deviceset>` gates (`<gate>`) to symbol representations (`<symbol>`), resolving pin lengths, directions (Input, Output, Passive, Power), and functions (Dot, Clk).
+- **PCB Geometry Extraction:** Resolves SMD pads (`<smd>`), Through-Hole pads (`<pad>`), copper pour polygons (`<polygon>`), vias (`<via>`), and silkscreen layers (21 tPlace, 22 bPlace, 25 tNames, 26 bNames).
+
+### 2. Electrical Rules Check Engine (`scripts/analyze_schematic.py`)
+Executes an automated rule audit suite on schematic netlists:
+- **`SCH-ERC-001` (Unconnected Pin):** Identifies active IC pins with no electrical net connection.
+- **`SCH-ERC-002` (Floating Net):** Flags single-pinref nets with dangling connections.
+- **`SCH-ERC-003` (Power Pin Conflict):** Detects direct short circuits between distinct power domains.
+- **`SCH-ERC-004` (Missing Decoupling Caps):** Audits power supply pins on active ICs for proper local decoupling capacitors.
+- **`SCH-ERC-005` (Reset/Enable Control):** Checks for pull-up/pull-down resistors on reset (NRST) and enable (EN) lines.
+- **`SCH-ERC-006` (Crystal Load Capacitors):** Verifies quartz crystals have grounding load capacitors.
+- **`SCH-ERC-007` (Default Net Naming):** Identifies auto-generated net names (`N$1`) on critical communication lines.
+
+### 3. Design Rules & Manufacturing Engine (`scripts/analyze_pcb.py`)
+Audits physical board layouts against standard manufacturing limits:
+- **`PCB-DRC-001` (Trace Width):** Flags copper tracks narrower than standard manufacturing thresholds ($< 0.15\text{ mm} / 6\text{ mil}$).
+- **`PCB-DRC-002` (Via Drill Size):** Flags via drill holes below standard drill capabilities ($< 0.30\text{ mm} / 12\text{ mil}$).
+- **`PCB-DRC-003` (Unrouted Airwires):** Detects multi-pad signals with zero routed copper tracks or polygons.
+- **`PCB-DRC-004` (Silkscreen Over Pad):** Identifies silkscreen text overlapping exposed solder pads.
+- **`PCB-DRC-005` (Annular Ring Width):** Checks minimum annular ring widths for via drill holes.
+- **`PCB-DRC-006` (Board Edge Clearance):** Flags components or copper elements placed within $0.5\text{ mm}$ of the board edge.
+
+### 4. Schematic-vs-PCB Cross-Analysis Engine (`scripts/cross_analysis.py`)
+Ensures full synchronization between schematic capture and board layout:
+- **`CROSS-001` (Missing Component):** Detects schematic components missing from the PCB layout.
+- **`CROSS-002` (Value Mismatch):** Flags discrepancies between schematic part values and board element values.
+- **`CROSS-003` (Unmapped Signal):** Identifies schematic nets missing from the board signal list.
+
+### 5. Bill of Materials Extractor (`scripts/export_bom.py`)
+- Groups identical component configurations by DeviceSet, Value, Package, and Library.
+- Outputs clean, structured JSON or CSV ready for distributor integration (`digikey`, `mouser`, `lcsc`, `element14`).
+
+### 6. Programmatic XML Editor (`scripts/edit_eagle.py`)
+- Provides CLI and API methods to update part values, rename nets/signals, and add part attributes.
+- Re-serializes DTD-compliant, pretty-formatted XML files ready for EAGLE CAD or Fusion 360.
+
+### 7. GUI Script Generator (`scripts/generate_scr.py`)
+- Compiles executable EAGLE CAD batch command files (`.scr`) for GUI automation.
 
 ---
 
@@ -47,27 +96,27 @@ git clone https://github.com/fbetancourt-dev/eagle-cad-skill.git ~/.gemini/confi
 
 ---
 
-## 🛠️ Usage
+## 🛠️ Usage Examples
 
-### 1. Analyze EAGLE Schematic (ERC Check)
+### 1. Run ERC Schematic Analysis
 
 ```bash
 python3 ~/.gemini/config/skills/eagle/scripts/analyze_schematic.py my_design.sch
 ```
 
-### 2. Analyze PCB Layout (DRC & DFM Check)
+### 2. Run DRC & DFM PCB Layout Analysis
 
 ```bash
 python3 ~/.gemini/config/skills/eagle/scripts/analyze_pcb.py my_design.brd
 ```
 
-### 3. Schematic vs PCB Cross-Verification
+### 3. Run Schematic vs PCB Cross-Verification
 
 ```bash
 python3 ~/.gemini/config/skills/eagle/scripts/cross_analysis.py my_design.sch my_design.brd
 ```
 
-### 4. Extract Structured BOM
+### 4. Export Structured BOM (CSV)
 
 ```bash
 python3 ~/.gemini/config/skills/eagle/scripts/export_bom.py --sch my_design.sch --brd my_design.brd --format csv
