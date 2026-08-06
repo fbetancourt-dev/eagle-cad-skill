@@ -334,10 +334,10 @@ def main():
     for sig_name in signals_to_route:
         res = router.route_airwire_signal(sig_name)
         if res:
-            print(f"✓ Routed signal '{sig_name}' successfully: {len(res['wires'])} track segments, {len(res['vias'])} vias.")
+            print(f"[SUCCESS] Routed signal '{sig_name}' successfully: {len(res['wires'])} track segments, {len(res['vias'])} vias.")
             success_count += 1
         else:
-            print(f"✗ Failed to find A* path for signal '{sig_name}'.")
+            print(f"[FAILED] Could not find A* path for signal '{sig_name}'.")
 
     print(f"-> Autorouting complete: {success_count}/{len(signals_to_route)} signals routed successfully.")
 

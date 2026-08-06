@@ -61,15 +61,15 @@ def autoroute_board(brd_path, mode="auto", grid_step=0.5, freerouting_jar=None, 
         for sig_name in unrouted_signals:
             res = router.route_airwire_signal(sig_name)
             if res:
-                print(f"  ✓ A* routed '{sig_name}' ({len(res['wires'])} tracks, {len(res['vias'])} vias)")
+                print(f"  [SUCCESS] A* routed '{sig_name}' ({len(res['wires'])} tracks, {len(res['vias'])} vias)")
                 routed_count += 1
             else:
                 failed_signals.append(sig_name)
-                print(f"  ✗ A* could not find path for '{sig_name}'")
+                print(f"  [FAILED] A* could not find path for '{sig_name}'")
 
         # If all signals routed successfully via A*, finish early
         if len(failed_signals) == 0 and len(unrouted_signals) > 0:
-            print(f"\n🎉 ALL SIGNALS SUCCESSFULLY ROUTED VIA NATIVE A*!")
+            print(f"\n[SUCCESS] ALL SIGNALS SUCCESSFULLY ROUTED VIA NATIVE A*!")
             return {"status": "SUCCESS", "mode_used": "astar", "routed_count": routed_count, "failed_count": 0}
 
         if mode == "astar" or len(failed_signals) == 0:
@@ -90,12 +90,12 @@ def autoroute_board(brd_path, mode="auto", grid_step=0.5, freerouting_jar=None, 
             ses_path = brd_path.replace(".brd", ".ses")
             try:
                 pipeline.run_freerouting_headless(dsn_path, ses_path)
-                print(f"  ✓ Freerouting completed. Session saved to '{ses_path}'")
+                print(f"  [SUCCESS] Freerouting completed. Session saved to '{ses_path}'")
                 return {"status": "SUCCESS", "mode_used": "freerouting", "dsn_file": dsn_path, "ses_file": ses_path}
             except Exception as e:
-                print(f"  ✗ Freerouting execution note: {e}")
+                print(f"  [ERROR] Freerouting execution note: {e}")
         else:
-            print(f"  ℹ Specctra DSN ready at '{dsn_path}'. (Optional freerouting.jar not specified).")
+            print(f"  [INFO] Specctra DSN ready at '{dsn_path}'. (Optional freerouting.jar not specified).")
             return {"status": "DSN_READY", "mode_used": "freerouting", "dsn_file": dsn_path}
 
     return {"status": "COMPLETE", "mode_used": mode}
