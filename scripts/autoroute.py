@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 """
+===============================================================================
 Unified Hybrid PCB Autorouter Engine for EAGLE CAD (.sch and .brd)
-Supports Dual Autorouting Modes:
-  1. 'astar'       -> Pure Python native 2D/3D grid pathfinding with via/corner cost penalties.
-  2. 'freerouting' -> Specctra DSN/SES topological engine integration.
-  3. 'auto'        -> Hybrid multi-tier mode: runs native A* first, falling back to Freerouting if needed.
+===============================================================================
+Author: Francisco Betancourt (Antigravity Agentic Assistant)
+Description:
+    Provides a unified entry point supporting dual autorouting engines:
+      1. 'astar'       -> Pure Python native 2D/3D A* grid pathfinding.
+      2. 'freerouting' -> Specctra DSN/SES topological engine integration.
+      3. 'auto'        -> Hybrid multi-tier mode: runs native A* grid search first,
+                          falling back seamlessly to Freerouting if needed.
 """
 
 import sys
@@ -15,6 +20,19 @@ from autoroute_astar import AStarPCBRouter
 from autoroute_freerouting import FreeroutingPipeline
 
 def autoroute_board(brd_path, mode="auto", grid_step=0.5, freerouting_jar=None, output_path=None):
+    """
+    Executes autorouting on specified board path using selected mode.
+    
+    Args:
+        brd_path (str): Path to input EAGLE .brd file.
+        mode (str): Routing mode ('auto', 'astar', 'freerouting').
+        grid_step (float): Resolution step in mm for A* grid search.
+        freerouting_jar (str): Optional path to freerouting.jar.
+        output_path (str): Optional output path for routed board file.
+        
+    Returns:
+        dict: Execution status dictionary containing mode used and routing results.
+    """
     print(f"==================================================")
     print(f"STARTING HYBRID PCB AUTOROUTER: {os.path.basename(brd_path)}")
     print(f"Mode: '{mode.upper()}' | Grid Step: {grid_step} mm")
@@ -22,11 +40,14 @@ def autoroute_board(brd_path, mode="auto", grid_step=0.5, freerouting_jar=None, 
 
     target_out = output_path if output_path else brd_path
 
-    # Mode 1: A* Native Grid Router
+    # -------------------------------------------------------------------------
+    # Mode 1 / Phase 1: Pure Python Native A* Grid Search
+    # -------------------------------------------------------------------------
     if mode in ["astar", "auto"]:
         print("\n--- [Phase 1] Executing Pure Python Native A* Grid Search ---")
         router = AStarPCBRouter(brd_path, grid_step=grid_step)
         
+        # Identify signals with 2+ contactrefs and 0 routed tracks
         unrouted_signals = []
         for sig in router.brd_data.get("signals", []):
             if len(sig.get("contactrefs", [])) >= 2 and len(sig.get("wires", [])) == 0:
@@ -46,6 +67,7 @@ def autoroute_board(brd_path, mode="auto", grid_step=0.5, freerouting_jar=None, 
                 failed_signals.append(sig_name)
                 print(f"  ✗ A* could not find path for '{sig_name}'")
 
+        # If all signals routed successfully via A*, finish early
         if len(failed_signals) == 0 and len(unrouted_signals) > 0:
             print(f"\n🎉 ALL SIGNALS SUCCESSFULLY ROUTED VIA NATIVE A*!")
             return {"status": "SUCCESS", "mode_used": "astar", "routed_count": routed_count, "failed_count": 0}
@@ -53,7 +75,9 @@ def autoroute_board(brd_path, mode="auto", grid_step=0.5, freerouting_jar=None, 
         if mode == "astar" or len(failed_signals) == 0:
             return {"status": "PARTIAL" if failed_signals else "SUCCESS", "mode_used": "astar", "routed_count": routed_count, "failed_count": len(failed_signals)}
 
-    # Mode 2: Freerouting Fallback
+    # -------------------------------------------------------------------------
+    # Mode 2 / Phase 2: Freerouting Topological Engine Fallback
+    # -------------------------------------------------------------------------
     if mode in ["freerouting", "auto"]:
         print("\n--- [Phase 2] Commencing Freerouting Topological Engine ---")
         pipeline = FreeroutingPipeline(brd_path, freerouting_jar=freerouting_jar)

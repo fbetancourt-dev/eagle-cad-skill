@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
 """
+===============================================================================
 Native Pure Python A* Grid PCB Autorouter Engine
-Performs 2D/3D grid pathfinding (Top Layer 1 / Bottom Layer 16) with via and corner cost penalties,
-resolving unrouted airwires and injecting routed copper tracks back into EAGLE .brd files.
+===============================================================================
+Author: Francisco Betancourt (Antigravity Agentic Assistant)
+Description:
+    Implements a 2D/3D A* grid pathfinding algorithm in pure Python to route PCB
+    airwire signals. Computes step costs, Manhattan distance heuristics, layer
+    change via penalties, and 90-degree corner penalties. Automatically builds an
+    obstacle grid from component pads and trace clearances, returning valid copper
+    wires and vias.
 """
 
 import sys
@@ -16,17 +23,30 @@ from eagle_parser import EagleParser
 from edit_eagle import EagleEditor
 
 class AStarPCBRouter:
+    """
+    Grid-based A* pathfinder for 2-layer PCB layouts (Top Layer 1 / Bottom Layer 16).
+    """
     def __init__(self, brd_path, grid_step=0.5, via_penalty=10.0, corner_penalty=2.0):
+        """
+        Initialize autorouter with board file, grid step resolution (mm), and cost penalties.
+        
+        Args:
+            brd_path (str): Path to EAGLE .brd file.
+            grid_step (float): Grid cell size in mm (e.g. 0.5 mm or 0.254 mm).
+            via_penalty (float): Cost penalty added when changing layers (placing a via).
+            corner_penalty (float): Cost penalty added when changing trace direction (turning 90 deg).
+        """
         self.brd_path = brd_path
         self.grid_step = grid_step
         self.via_penalty = via_penalty
         self.corner_penalty = corner_penalty
         
+        # Parse EAGLE board structure
         parser = EagleParser(brd_path=brd_path)
         self.data = parser.parse()
         self.brd_data = self.data.get("board", {})
         
-        # Calculate board bounds
+        # Calculate board outline boundaries (Layer 20 Dimension)
         dimension = self.brd_data.get("dimension", [])
         min_x, max_x = float("inf"), float("-inf")
         min_y, max_y = float("inf"), float("-inf")
@@ -38,22 +58,25 @@ class AStarPCBRouter:
                 min_y = min(min_y, y)
                 max_y = max(max_y, y)
                 
+        # Default bounding box fallback if no dimension wires found
         if min_x > max_x:
             min_x, max_x, min_y, max_y = 0.0, 50.0, 0.0, 50.0
             
+        # Add 1.0 mm margin around board boundary
         self.min_x = min_x - 1.0
         self.max_x = max_x + 1.0
         self.min_y = min_y - 1.0
         self.max_y = max_y + 1.0
         
+        # Calculate grid column and row dimensions
         self.cols = int(math.ceil((self.max_x - self.min_x) / self.grid_step)) + 1
         self.rows = int(math.ceil((self.max_y - self.min_y) / self.grid_step)) + 1
         
-        # Grid layers: 0 -> Top (Layer 1), 1 -> Bottom (Layer 16)
-        # Grid values: 0 -> Free, >0 -> Obstacle (Signal ID or 9999)
+        # Spatial grid mapping: (layer, col, row) -> status (0: Free, 9999: Obstacle)
         self.grid = {}
 
     def world_to_grid(self, x, y):
+        """Convert real-world board millimeter coordinates (x, y) to grid cell (col, row)."""
         col = int(round((x - self.min_x) / self.grid_step))
         row = int(round((y - self.min_y) / self.grid_step))
         col = max(0, min(self.cols - 1, col))
@@ -61,11 +84,13 @@ class AStarPCBRouter:
         return (col, row)
 
     def grid_to_world(self, col, row):
+        """Convert grid cell (col, row) back to real-world board millimeter coordinates (x, y)."""
         x = self.min_x + col * self.grid_step
         y = self.min_y + row * self.grid_step
         return (round(x, 4), round(y, 4))
 
     def _mark_obstacle(self, layer, col, row, radius_grid=1):
+        """Mark a grid cell and surrounding radius as an impassable obstacle."""
         for dc in range(-radius_grid, radius_grid + 1):
             for dr in range(-radius_grid, radius_grid + 1):
                 c, r = col + dc, row + dr
@@ -73,12 +98,17 @@ class AStarPCBRouter:
                     self.grid[(layer, c, r)] = 9999
 
     def build_obstacle_grid(self, target_signal_name):
+        """
+        Builds spatial obstacle grid by marking pads and components belonging to
+        OTHER electrical signals as blocked.
+        """
         self.grid = {}
         elements = {elem["name"]: elem for elem in self.brd_data.get("elements", [])}
         packages = self.brd_data.get("packages", {})
         
-        # Mark component pads of OTHER signals as obstacles
+        # Iterate all signals on the board
         for sig in self.brd_data.get("signals", []):
+            # Skip the signal currently being routed
             if sig["name"] == target_signal_name:
                 continue
                 
@@ -92,7 +122,7 @@ class AStarPCBRouter:
                 pkg_key = f"{elem.get('library')}_{elem.get('package')}"
                 pkg = packages.get(pkg_key, {})
                 
-                # Check SMD pads
+                # Mark Surface-Mount (SMD) pads
                 for smd in pkg.get("smds", []):
                     if smd.get("name") == pad_name:
                         px = elem["x"] + smd["x"]
@@ -101,7 +131,7 @@ class AStarPCBRouter:
                         layer = 0 if smd.get("layer", 1) == 1 else 1
                         self._mark_obstacle(layer, col, row, radius_grid=1)
 
-                # Check Through-Hole pads
+                # Mark Through-Hole (TH) pads on both layers
                 for pad in pkg.get("pads", []):
                     if pad.get("name") == pad_name:
                         px = elem["x"] + pad["x"]
@@ -111,18 +141,21 @@ class AStarPCBRouter:
                         self._mark_obstacle(1, col, row, radius_grid=1)
 
     def find_path(self, start_pos, end_pos):
-        """A* Pathfinding algorithm from start_pos (layer, col, row) to end_pos (layer, col, row)."""
+        """
+        Executes A* Pathfinding algorithm from start_pos (layer, col, row) to end_pos (layer, col, row).
+        Returns a list of grid nodes representing the path, or None if unroutable.
+        """
         start_layer, start_c, start_r = start_pos
         end_layer, end_c, end_r = end_pos
         
-        # Min-heap open set: (f_score, g_score, (layer, col, row), last_direction)
+        # Priority queue open set: stores (f_score, g_score, (layer, col, row), last_direction)
         open_set = []
         heapq.heappush(open_set, (0.0, 0.0, start_pos, None))
         
         came_from = {}
         g_score = {start_pos: 0.0}
         
-        # 6-neighbor directions: 4 planar (N, S, E, W) + 2 layer switches (Via)
+        # Neighbor movement vectors: 8 planar direction vectors + cost
         planar_moves = [
             (1, 0, 0, 1.0, "E"),
             (-1, 0, 0, 1.0, "W"),
@@ -135,6 +168,7 @@ class AStarPCBRouter:
         ]
         
         def heuristic(node):
+            """Admissible heuristic function: Euclidean distance + via cost estimate."""
             nl, nc, nr = node
             dist_xy = math.sqrt((nc - end_c)**2 + (nr - end_r)**2)
             layer_change = 0 if nl == end_layer else 1
@@ -143,8 +177,8 @@ class AStarPCBRouter:
         while open_set:
             _, current_g, current_node, last_dir = heapq.heappop(open_set)
             
+            # Target reached condition
             if current_node == end_pos or (current_node[1] == end_c and current_node[2] == end_r):
-                # Reconstruct path
                 path = [current_node]
                 curr = current_node
                 while curr in came_from:
@@ -155,15 +189,16 @@ class AStarPCBRouter:
 
             cl, cc, cr = current_node
 
-            # Try planar moves
+            # Evaluate planar moves on current layer
             for dc, dr, dl, move_cost, move_dir in planar_moves:
                 nc, nr = cc + dc, cr + dr
                 next_node = (cl, nc, nr)
                 
                 if 0 <= nc < self.cols and 0 <= nr < self.rows:
                     if self.grid.get(next_node, 0) == 9999 and next_node != end_pos:
-                        continue # Obstacle
+                        continue # Skip obstacle
                         
+                    # Apply corner penalty for direction change
                     turn_cost = self.corner_penalty if (last_dir and last_dir != move_dir) else 0.0
                     tentative_g = current_g + move_cost + turn_cost
                     
@@ -173,7 +208,7 @@ class AStarPCBRouter:
                         f_score = tentative_g + heuristic(next_node)
                         heapq.heappush(open_set, (f_score, tentative_g, next_node, move_dir))
 
-            # Try via layer switch
+            # Evaluate layer switch move (placing a via)
             other_layer = 1 if cl == 0 else 0
             via_node = (other_layer, cc, cr)
             if self.grid.get(via_node, 0) != 9999:
@@ -184,9 +219,13 @@ class AStarPCBRouter:
                     f_score = tentative_g + heuristic(via_node)
                     heapq.heappush(open_set, (f_score, tentative_g, via_node, last_dir))
 
-        return None # Path not found
+        return None # Return None if no path found
 
     def route_airwire_signal(self, signal_name):
+        """
+        Finds A* path for specified unrouted signal name and converts path into
+        EAGLE track wire segments and vias.
+        """
         elements = {elem["name"]: elem for elem in self.brd_data.get("elements", [])}
         packages = self.brd_data.get("packages", {})
         
@@ -203,7 +242,7 @@ class AStarPCBRouter:
         if len(contactrefs) < 2:
             return None
             
-        # Get pad positions
+        # Determine pad coordinates
         pad_positions = []
         for cr in contactrefs:
             elem_name = cr.get("element")
@@ -240,7 +279,7 @@ class AStarPCBRouter:
         if not path:
             return None
             
-        # Convert path to segments and vias
+        # Convert A* grid path into EAGLE wire track segments and vias
         routed_wires = []
         routed_vias = []
         

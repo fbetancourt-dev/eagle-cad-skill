@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 """
+===============================================================================
 EAGLE CAD XML Parser Engine (.sch and .brd files)
-Parses EAGLE CAD v6.0 - v9.x XML files into structured Python dicts/JSON.
+===============================================================================
+Author: Francisco Betancourt (Antigravity Agentic Assistant)
+Description:
+    Parses Autodesk and CadSoft EAGLE CAD XML schematic (.sch) and board layout (.brd)
+    files into structured Python data structures. Handles library definitions,
+    devicesets, gates, symbols, smashed attributes, net pinrefs, footprint SMD/pad
+    geometries, routed copper signals, vias, polygons, and board dimensions.
 """
 
 import xml.etree.ElementTree as ET
@@ -10,10 +17,18 @@ import os
 import sys
 
 class EagleParser:
+    """
+    Main parser object for EAGLE CAD XML files. Accepts schematic (.sch) and/or
+    board (.brd) file paths and returns a consolidated dictionary representation.
+    """
     def __init__(self, sch_path=None, brd_path=None):
         self.sch_path = sch_path
         self.brd_path = brd_path
+        
+        # Gates mapping cache: library -> deviceset -> gate_name -> {symbol, x, y}
         self.gates_map = {}
+        
+        # Core structured output container
         self.data = {
             "name": "",
             "layers": {},
@@ -35,19 +50,28 @@ class EagleParser:
         }
 
     def parse(self):
+        """
+        Executes parsing on provided schematic and board files, returning the
+        parsed data dictionary.
+        """
+        # Determine design project name from file basenames
         if self.brd_path and os.path.exists(self.brd_path):
             self.data["name"] = os.path.splitext(os.path.basename(self.brd_path))[0]
         elif self.sch_path and os.path.exists(self.sch_path):
             self.data["name"] = os.path.splitext(os.path.basename(self.sch_path))[0]
 
+        # Parse schematic XML if available
         if self.sch_path and os.path.exists(self.sch_path):
             self._parse_schematic()
+            
+        # Parse board XML if available
         if self.brd_path and os.path.exists(self.brd_path):
             self._parse_board()
             
         return self.data
 
     def _parse_layers(self, root):
+        """Extract layer definitions (number, name, color, visibility, active state)."""
         layers_node = root.find(".//layers")
         if layers_node is not None:
             for layer in layers_node.findall("layer"):
@@ -60,6 +84,7 @@ class EagleParser:
                 }
 
     def _parse_schematic(self):
+        """Parse EAGLE schematic (.sch) XML file."""
         try:
             tree = ET.parse(self.sch_path)
         except Exception as e:
@@ -72,12 +97,15 @@ class EagleParser:
         if schematic_node is None:
             return
 
-        # 1. Parse symbol libraries & deviceset gate maps
+        # ---------------------------------------------------------------------
+        # 1. Parse symbol libraries & deviceset gate mappings
+        # ---------------------------------------------------------------------
         libraries = schematic_node.find("libraries")
         if libraries is not None:
             for library in libraries.findall("library"):
                 lib_name = library.get("name")
                 
+                # Map deviceset gates to their corresponding symbol names and coordinates
                 devicesets_node = library.find("devicesets")
                 if devicesets_node is not None:
                     for deviceset in devicesets_node.findall("deviceset"):
@@ -99,6 +127,7 @@ class EagleParser:
                                     "y": gate_y
                                 }
 
+                # Extract graphical symbol primitives (wires, pins, texts, rectangles, circles, frames)
                 symbols_node = library.find("symbols")
                 if symbols_node is not None:
                     for symbol in symbols_node.findall("symbol"):
@@ -116,6 +145,7 @@ class EagleParser:
                             "frames": []
                         }
                         
+                        # Symbol frame outlines
                         for f in symbol.findall("frame"):
                             sym_data["frames"].append({
                                 "x1": float(f.get("x1", 0)),
@@ -127,6 +157,7 @@ class EagleParser:
                                 "layer": int(f.get("layer", 94))
                             })
                         
+                        # Symbol wire segments
                         for w in symbol.findall("wire"):
                             curve = w.get("curve")
                             sym_data["wires"].append({
@@ -138,6 +169,8 @@ class EagleParser:
                                 "layer": int(w.get("layer", 94)),
                                 "curve": float(curve) if curve is not None else None
                             })
+                            
+                        # Symbol pin definitions (electrical type, direction, rotation, length)
                         for p in symbol.findall("pin"):
                             sym_data["pins"].append({
                                 "name": p.get("name"),
@@ -149,6 +182,8 @@ class EagleParser:
                                 "function": p.get("function", "none"),
                                 "rot": p.get("rot", "R0")
                             })
+                            
+                        # Text annotations
                         for t in symbol.findall("text"):
                             sym_data["texts"].append({
                                 "text": t.text or "",
@@ -158,6 +193,8 @@ class EagleParser:
                                 "layer": int(t.get("layer", 94)),
                                 "rot": t.get("rot", "R0")
                             })
+                            
+                        # Filled rectangles & circles
                         for r in symbol.findall("rectangle"):
                             sym_data["rectangles"].append({
                                 "x1": float(r.get("x1", 0)),
@@ -177,7 +214,9 @@ class EagleParser:
                         
                         self.data["schematic"]["symbols"][sym_key] = sym_data
 
-        # 2. Parse parts and sheet instances
+        # ---------------------------------------------------------------------
+        # 2. Parse component parts and sheet instances
+        # ---------------------------------------------------------------------
         parts_node = schematic_node.find("parts")
         if parts_node is not None:
             for part in parts_node.findall("part"):
@@ -218,6 +257,7 @@ class EagleParser:
                             else:
                                 sym_name = gate_info
                         
+                        # Extract smashed text attribute placements (overridden text coordinates)
                         smashed_attrs = {}
                         for attr in inst.findall("attribute"):
                             attr_name = attr.get("name", "").upper()
@@ -245,7 +285,9 @@ class EagleParser:
                             "smashed_attrs": smashed_attrs
                         })
 
-                # 3. Parse schematic nets
+                # -------------------------------------------------------------
+                # 3. Parse schematic nets & net segments
+                # -------------------------------------------------------------
                 nets_node = sheet.find("nets")
                 if nets_node is not None:
                     for net in nets_node.findall("net"):
@@ -296,6 +338,7 @@ class EagleParser:
                     self._parse_plain_node(plain_node, self.data["schematic"]["plain"], is_board=False)
 
     def _parse_board(self):
+        """Parse EAGLE board (.brd) XML file."""
         try:
             tree = ET.parse(self.brd_path)
         except Exception as e:
@@ -308,7 +351,9 @@ class EagleParser:
         if board_node is None:
             return
 
-        # 1. Parse footprint libraries
+        # ---------------------------------------------------------------------
+        # 1. Parse footprint libraries (packages, pads, SMD pads, holes)
+        # ---------------------------------------------------------------------
         libraries = board_node.find("libraries")
         if libraries is not None:
             for library in libraries.findall("library"):
@@ -400,7 +445,9 @@ class EagleParser:
                         
                         self.data["board"]["packages"][pkg_key] = pkg_data
 
-        # 2. Parse board elements
+        # ---------------------------------------------------------------------
+        # 2. Parse physical board elements (component placements)
+        # ---------------------------------------------------------------------
         elements_node = board_node.find("elements")
         if elements_node is not None:
             for elem in elements_node.findall("element"):
@@ -414,7 +461,9 @@ class EagleParser:
                     "rot": elem.get("rot", "R0")
                 })
 
-        # 3. Parse signals, tracks, vias, contactrefs
+        # ---------------------------------------------------------------------
+        # 3. Parse routed signals, tracks, vias, and copper pours
+        # ---------------------------------------------------------------------
         signals_node = board_node.find("signals")
         if signals_node is not None:
             for sig in signals_node.findall("signal"):
@@ -463,12 +512,16 @@ class EagleParser:
                     sig_data["polygons"].append(poly_data)
                 self.data["board"]["signals"].append(sig_data)
 
-        # 4. Parse board dimension (layer 20) and plain elements
+        # ---------------------------------------------------------------------
+        # 4. Parse board outline (Layer 20 Dimension) and plain elements
+        # ---------------------------------------------------------------------
         plain_node = board_node.find("plain")
         if plain_node is not None:
             self._parse_plain_node(plain_node, self.data["board"]["plain"], is_board=True)
  
-        # 5. Parse mechanical holes
+        # ---------------------------------------------------------------------
+        # 5. Parse mechanical mounting holes
+        # ---------------------------------------------------------------------
         holes_node = board_node.find("holes")
         if holes_node is not None:
             for h in holes_node.findall("hole"):
@@ -479,6 +532,7 @@ class EagleParser:
                 })
 
     def _parse_plain_node(self, plain_node, dest_list, is_board=False):
+        """Helper to parse plain graphical elements (wires, text, circles, polygons)."""
         for w in plain_node.findall("wire"):
             layer_num = int(w.get("layer", 1))
             curve = w.get("curve")
