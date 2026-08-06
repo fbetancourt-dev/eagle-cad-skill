@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Run Analysis Verification
+      run: |
+        python3 scripts/analyze_schematic.py examples/test_circuit.sch
+        python3 scripts/analyze_pcb.py examples/test_circuit.brd
+        python3 scripts/cross_analysis.py examples/test_circuit.sch examples/test_circuit.brd
+        python3 scripts/export_bom.py --sch examples/test_circuit.sch --brd examples/test_circuit.brd --format csv

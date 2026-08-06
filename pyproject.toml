@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eagle-cad-skill"
+version = "1.0.0"
+description = "Autonomous AI agent skill for Autodesk and CadSoft EAGLE CAD schematic and PCB analysis"
+readme = "README.md"
+authors = [{ name = "Francisco Betancourt", email = "fbetancourt-dev@users.noreply.github.com" }]
+license = { text = "MIT" }
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

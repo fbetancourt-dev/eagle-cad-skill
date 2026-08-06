@@ -1,0 +1,17 @@
+{
+  "name": "eagle-cad-skill",
+  "version": "1.0.0",
+  "description": "Autonomous AI agent skill for Autodesk and CadSoft EAGLE CAD schematic and PCB analysis, ERC/DRC auditing, BOM extraction, and automation.",
+  "author": "Francisco Betancourt <fbetancourt-dev>",
+  "license": "MIT",
+  "repository": "https://github.com/fbetancourt-dev/eagle-cad-skill",
+  "keywords": [
+    "eagle-cad",
+    "schematic",
+    "pcb",
+    "erc",
+    "drc",
+    "agentic-ai",
+    "antigravity-skill"
+  ]
+}
