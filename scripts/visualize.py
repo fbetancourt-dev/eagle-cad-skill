@@ -45,9 +45,13 @@ def print_schema():
         "circuit_name": "str",
         "html_viewer": "str (path to generated interactive HTML file)",
         "svg_schematic": "str (path to exported schematic SVG, if requested)",
-        "svg_board": "str (path to exported PCB board SVG, if requested)",
+        "svg_board_top": "str (path to isolated Top layer SVG)",
+        "svg_board_bottom": "str (path to isolated Bottom layer mirrored SVG)",
+        "svg_board_both": "str (path to combined PCB board SVG)",
         "png_schematic": "str (path to exported schematic PNG, if requested)",
-        "png_board": "str (path to exported PCB board PNG, if requested)",
+        "png_board_top": "str (path to isolated Top layer PNG)",
+        "png_board_bottom": "str (path to isolated Bottom layer mirrored PNG)",
+        "png_board_both": "str (path to combined PCB board PNG)",
         "browser_opened": "bool",
         "cli_used": "str (executable path)"
     }
@@ -157,28 +161,39 @@ Examples:
         "circuit_name": circuit_name,
         "html_viewer": target_html if os.path.exists(target_html) else None,
         "svg_schematic": None,
-        "svg_board": None,
+        "svg_board_top": None,
+        "svg_board_bottom": None,
+        "svg_board_both": None,
         "png_schematic": None,
-        "png_board": None,
+        "png_board_top": None,
+        "png_board_bottom": None,
+        "png_board_both": None,
         "browser_opened": not args.no_open,
         "cli_used": viewer_bin
     }
 
     if svg_dir:
-        sch_svg = os.path.join(svg_dir, f"{circuit_name}_schematic.svg")
-        brd_svg = os.path.join(svg_dir, f"{circuit_name}_board.svg")
-        if os.path.exists(sch_svg):
-            result["svg_schematic"] = sch_svg
-        if os.path.exists(brd_svg):
-            result["svg_board"] = brd_svg
+        for key, suffix in [
+            ("svg_schematic", "_schematic.svg"),
+            ("svg_board_top", "_board_top.svg"),
+            ("svg_board_bottom", "_board_bottom.svg"),
+            ("svg_board_both", "_board.svg"),
+        ]:
+            p = os.path.join(svg_dir, f"{circuit_name}{suffix}")
+            if os.path.exists(p):
+                result[key] = p
+
     png_dir = os.path.abspath(args.export_png) if args.export_png else None
     if png_dir:
-        sch_png = os.path.join(png_dir, f"{circuit_name}_schematic.png")
-        brd_png = os.path.join(png_dir, f"{circuit_name}_board.png")
-        if os.path.exists(sch_png):
-            result["png_schematic"] = sch_png
-        if os.path.exists(brd_png):
-            result["png_board"] = brd_png
+        for key, suffix in [
+            ("png_schematic", "_schematic.png"),
+            ("png_board_top", "_board_top.png"),
+            ("png_board_bottom", "_board_bottom.png"),
+            ("png_board_both", "_board.png"),
+        ]:
+            p = os.path.join(png_dir, f"{circuit_name}{suffix}")
+            if os.path.exists(p):
+                result[key] = p
 
     if args.json:
         print(json.dumps(result, indent=2))
