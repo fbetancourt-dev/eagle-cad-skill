@@ -46,6 +46,8 @@ def print_schema():
         "html_viewer": "str (path to generated interactive HTML file)",
         "svg_schematic": "str (path to exported schematic SVG, if requested)",
         "svg_board": "str (path to exported PCB board SVG, if requested)",
+        "png_schematic": "str (path to exported schematic PNG, if requested)",
+        "png_board": "str (path to exported PCB board PNG, if requested)",
         "browser_opened": "bool",
         "cli_used": "str (executable path)"
     }
@@ -77,6 +79,7 @@ Examples:
     parser.add_argument("--brd", type=str, default=None, help="Explicit path to board (.brd)")
     parser.add_argument("-o", "--output", type=str, default=None, help="Output HTML file path")
     parser.add_argument("--export-svg", nargs="?", const=".", default=None, metavar="DIR", help="Export SVG directory")
+    parser.add_argument("--export-png", nargs="?", const=".", default=None, metavar="DIR", help="Export PNG preview directory (ideal for Antigravity artifacts)")
     parser.add_argument("--no-open", action="store_true", help="Do not open default web browser")
     parser.add_argument("--theme", choices=["dark", "classic"], default="dark", help="Viewer theme")
     parser.add_argument("--json", action="store_true", help="Emit structured JSON result for agent consumption")
@@ -117,6 +120,8 @@ Examples:
         cmd.extend(["-o", args.output])
     if args.export_svg is not None:
         cmd.extend(["--export-svg", args.export_svg])
+    if args.export_png is not None:
+        cmd.extend(["--export-png", args.export_png])
     if args.no_open:
         cmd.append("--no-open")
     if args.theme:
@@ -153,6 +158,8 @@ Examples:
         "html_viewer": target_html if os.path.exists(target_html) else None,
         "svg_schematic": None,
         "svg_board": None,
+        "png_schematic": None,
+        "png_board": None,
         "browser_opened": not args.no_open,
         "cli_used": viewer_bin
     }
@@ -164,6 +171,14 @@ Examples:
             result["svg_schematic"] = sch_svg
         if os.path.exists(brd_svg):
             result["svg_board"] = brd_svg
+    png_dir = os.path.abspath(args.export_png) if args.export_png else None
+    if png_dir:
+        sch_png = os.path.join(png_dir, f"{circuit_name}_schematic.png")
+        brd_png = os.path.join(png_dir, f"{circuit_name}_board.png")
+        if os.path.exists(sch_png):
+            result["png_schematic"] = sch_png
+        if os.path.exists(brd_png):
+            result["png_board"] = brd_png
 
     if args.json:
         print(json.dumps(result, indent=2))
