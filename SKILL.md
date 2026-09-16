@@ -47,6 +47,11 @@ description: >-
 ### Editing & Automation
 - `python3 <skill-path>/scripts/edit_eagle.py <file.sch|brd> --set-value R1 10k --rename-net GND AGND --set-attr R1 MPN PT0603` — Programmatically edits components, attributes, and net names, re-serializing clean EAGLE XML.
 - `python3 <skill-path>/scripts/generate_scr.py -o <file.scr> --add-component C-US@adafruit C1 10 20` — Compiles executable EAGLE batch scripts (`.scr`) for GUI automation.
+- **Native Autodesk EAGLE 7.7.0 Integration:**
+  - Headless batch export: `eagle -N- -C "SCRIPT top.scr; EXPORT IMAGE 'top.png' 300; QUIT;" <file.brd>` (always pass `-N-` to suppress modal prompts).
+  - Layer isolation scripts in `~/Applications/eagle-7.7.0/scr/`: `top.scr`, `bottom.scr`, `both.scr`, `all.scr`.
+  - Board editor keyboard shortcuts registered in `eagle.scr`: `Ctrl+T` (Top), `Ctrl+B` (Bottom), `Ctrl+A` (Both), `Ctrl+Shift+A` (All).
+  - Desktop DOM handling via `dogtail-gui-accessibility` for unhandled GUI modal dialogs.
 
 Use `--schema` flag on any script to inspect its output structure:
 ```bash
